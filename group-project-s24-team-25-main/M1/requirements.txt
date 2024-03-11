@@ -1,0 +1,6 @@
+Flask>=2.2.2
+scikit-learn
+joblib==1.3.2
+numpy==1.23.5
+pandas
+surprise
