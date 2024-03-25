@@ -1,0 +1,17 @@
+pandas
+scikit-learn
+numpy
+kafka
+kafka-python
+matplotlib
+tqdm
+notebook
+jupyterlab
+ipywidgets
+confluent-kafka 
+mysql-connector-python
+sqlalchemy
+surprise
+sagemaker
+boto3
+
