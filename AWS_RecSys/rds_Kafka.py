@@ -39,12 +39,12 @@ two_day_seconds
 #%%
 # ------------------------------------RDS MYSQL Connection------------------------------------
 conn = mysql.connector.connect(
-    user='admin', password='Xie19970826!', 
+    user='admin', password='Xie', 
     host='database.cffidgh00pge.us-east-1.rds.amazonaws.com', 
     database='mydb'
 )
 cur = conn.cursor()
-engine = create_engine('mysql+mysqlconnector://admin:Xie19970826!@database.cffidgh00pge.us-east-1.rds.amazonaws.com/mydb')
+engine = create_engine('mysql+mysqlconnector://admin:Xie@database.cffidgh00pge.us-east-1.rds.amazonaws.com/mydb')
 print(engine)
 #%%
 def parse_consumer(text):
