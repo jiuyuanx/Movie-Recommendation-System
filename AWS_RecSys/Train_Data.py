@@ -1,7 +1,7 @@
 #%%
 from sqlalchemy import create_engine
 import pandas as pd
-engine = create_engine('mysql+mysqlconnector://admin:Xie19970826!@database.cffidgh00pge.us-east-1.rds.amazonaws.com/mydb')
+engine = create_engine('mysql+mysqlconnector://admin:Xie@database.cffidgh00pge.us-east-1.rds.amazonaws.com/mydb')
 print(engine)
 sql = """
 SELECT userid, movieid, rating, row_number() over() r
