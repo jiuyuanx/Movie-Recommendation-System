@@ -3,7 +3,7 @@ import mysql.connector
 #%%
 # Database Connection (adjust for your RDS MySQL instance)
 conn = mysql.connector.connect(
-    user='admin', password='Xie19970826!', 
+    user='admin', password='Xie', 
     host='database.cffidgh00pge.us-east-1.rds.amazonaws.com', 
     database='mydb'
 )
