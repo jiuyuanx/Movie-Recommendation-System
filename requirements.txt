@@ -7,3 +7,4 @@ joblib
 scipy
 pympler
 tqdm
+seaborn
