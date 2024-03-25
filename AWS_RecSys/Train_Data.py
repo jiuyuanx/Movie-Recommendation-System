@@ -14,8 +14,8 @@ df.to_csv('train_data.csv', index=False)
 
 import boto3
 s3 = boto3.client('s3',
-    aws_access_key_id='AKIA2VM6YQBKO6LHQX4E',
-    aws_secret_access_key='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')
+    aws_access_key_id='xxx',
+    aws_secret_access_key='xxx')
 s3.upload_file('train_data.csv', '11695movie', 'data/train_data.csv')
 
 
