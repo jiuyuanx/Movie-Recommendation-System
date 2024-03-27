@@ -19,10 +19,10 @@ import os
 def train_model_sagemaker():
 # Set up the SageMaker session and role
     sagemaker_session = sagemaker.Session()
-    role = 'arn:aws:iam::733161750612:role/service-role/SageMaker-jiuyuanx-DS'  # Update this with your SageMaker role ARN
+    role = 'your-sagemaker-role'  # Update this with your SageMaker role ARN
 
     # Specify your S3 bucket and prefixes
-    bucket = '11695movie'
+    bucket = 'your-s3-bucket-name'
     output_prefix = 'sagemaker/model'  # Where the model artifacts will be stored
     train_prefix = 'data'  # The location of your training data
 
@@ -30,13 +30,17 @@ def train_model_sagemaker():
 
     # Create an estimator object for running a training job
     estimator = Estimator(
-        image_uri='733161750612.dkr.ecr.us-east-1.amazonaws.com/jiuyuanx:latest',  # Specify the training image
+        image_uri='your-image-uri',  # Specify the training image
         role=role,
         train_instance_count=1,  # Number of instances for training
         train_instance_type='ml.m5.2xlarge',  # Type of instance for training
         output_path=f's3://{bucket}/{output_prefix}',
         sagemaker_session=sagemaker_session,
-        hyperparameters={}
+        hyperparameters={},
+        metric_definitions=[
+        {'Name': 'MAE', 'Regex': 'mae=([0-9\\.]+);'},
+        {'Name': 'RMSE', 'Regex': 'rmse=([0-9\\.]+);'}
+    ]
     )
 
     # Specify the path to the training script

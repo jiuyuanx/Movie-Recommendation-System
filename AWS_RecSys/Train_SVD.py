@@ -51,6 +51,8 @@ if __name__ == "__main__":
     # Save the trained model
     joblib.dump(algo, os.path.join(model_dir, 'model.joblib'))
     # Additionally, write the performance metrics to a file
+    print(f"mae={mae};")
+    print(f"rmse={rmse};")
     with open(os.path.join(model_dir, 'performance_metrics.txt'), 'w') as f:
         f.write(f"MAE: {mae}\n")
         f.write(f"RMSE: {rmse}\n")

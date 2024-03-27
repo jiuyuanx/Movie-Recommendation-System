@@ -12,7 +12,7 @@ from sqlalchemy import create_engine
 import argparse
 from datetime import datetime, timedelta
 from confluent_kafka import Consumer, TopicPartition, KafkaException, KafkaError, OFFSET_BEGINNING, OFFSET_END
-
+import uuid
 
 # Kafka consumer configuration
 topic_name = "movielog25"  # Replace with your actual team number
@@ -21,30 +21,23 @@ bootstrap_servers = ['localhost:9092']
 # Initialize Kafka consumer
 conf = {
     'bootstrap.servers': 'localhost:9092',
-    'group.id': 'mlip-team25',
-    'auto.offset.reset': 'earliest',
-    'enable.auto.commit': False,  # Enable auto commit
+    'group.id': f'mlip-team25-{uuid.uuid4()}',
+    'auto.offset.reset': 'earliest',  # Can be 'earliest', 'latest', 'none'
+    'enable.auto.commit': False,
     'auto.commit.interval.ms': 1000,
 }
 consumer = Consumer(**conf)
 # consumer.subscribe([topic_name])
-#%%
-current_time = time.time()
-one_day_seconds = 24 * 60 * 60
-two_day_seconds = 2 * one_day_seconds
 
-start_of_2_day_ago = current_time - two_day_seconds
-current_time, start_of_2_day_ago
-two_day_seconds
 #%%
 # ------------------------------------RDS MYSQL Connection------------------------------------
 conn = mysql.connector.connect(
-    user='admin', password='Xie', 
-    host='database.cffidgh00pge.us-east-1.rds.amazonaws.com', 
+    user='admin', password='your-password', 
+    host='your-hostname', 
     database='mydb'
 )
 cur = conn.cursor()
-engine = create_engine('mysql+mysqlconnector://admin:Xie@database.cffidgh00pge.us-east-1.rds.amazonaws.com/mydb')
+engine = create_engine('mysql+mysqlconnector://your-username:your-password@your-hostname:3306/mydb')
 print(engine)
 #%%
 def parse_consumer(text):
@@ -98,50 +91,56 @@ def get_timestamp_n_days_ago(day1, day2):
     timestamp1 = (datetime.now()- timedelta(seconds=seconds1)).timestamp()
     timestamp2 = (datetime.now()- timedelta(seconds=seconds2)).timestamp()
 
-    print(timestamp1, timestamp2)
+    print("Timestamp start:", datetime.fromtimestamp(timestamp1), "Timestamp end:",  datetime.fromtimestamp(timestamp2))
     return int(timestamp1* 1000), int(timestamp2*1000) # Kafka expects timestamps in milliseconds
 
-#Reset Consumer!!!
-partition = 0
-# offset = int(timestamp2*1000)
-tp = TopicPartition(topic_name, 0, 0)
-consumer.offsets_for_times([tp])
+# #Reset Consumer!!!
+# partition = 0
+# # offset = int(timestamp2*1000)
+# tp = TopicPartition(topic_name, 0, 0)
+# consumer.offsets_for_times([tp])
 
 # Function to find and set the offset to start consuming from, for each partition
 def set_consumer_offsets_to_n_days_ago(consumer, topic, day1, day2):
-    n_days_ago_timestamp, current  = get_timestamp_n_days_ago(day1, day2)
-    partitions = consumer.list_topics(topic).topics[topic].partitions.keys()
+    n_days_ago_timestamp, current = get_timestamp_n_days_ago(day1, day2)
 
-    topic_partitions = [TopicPartition(topic, partition, current) for partition in partitions]
-    end_offsets = consumer.offsets_for_times(topic_partitions)
-    consumer.assign([end_offsets[0]])
-    end_offsets = end_offsets[0].offset
+    # Get all partitions for the topic
+    metadata = consumer.list_topics(topic)
+    partitions = [0]#metadata.topics[topic].partitions.keys()
 
-    topic_partitions = [TopicPartition(topic, partition, n_days_ago_timestamp) for partition in partitions]
-    start_offsets = consumer.offsets_for_times(topic_partitions)
-    consumer.assign([start_offsets[0]])
-    start_offsets = start_offsets[0].offset
+    # Convert timestamps to offsets
+    start_offsets = {}
+    end_offsets = {}
+    for partition in partitions:
+        topic_partitions = [TopicPartition(topic, partition, current) for partition in partitions]
+        end_offset = consumer.offsets_for_times(topic_partitions)
+        consumer.assign([end_offset[0]])
+        end_offset = end_offset[0].offset
+        end_offsets[partition] = end_offset
 
-    print( "Start Offsets: ", start_offsets, "End Offsets: ", end_offsets)
+        topic_partitions = [TopicPartition(topic, partition, n_days_ago_timestamp) for partition in partitions]
+        start_offset = consumer.offsets_for_times(topic_partitions)
+        consumer.assign([start_offset[0]])
+        start_offset = start_offset[0].offset
+        start_offsets[partition] = start_offset
+        print("Start Offset:", start_offset, "End Offset:", end_offset)
 
-    # Calculate total messages
-    total_messages = end_offsets - start_offsets
-    offsets = consumer.offsets_for_times(topic_partitions, timeout=5000)
+    # Reassign consumer to the starting offsets
+    for partition, offset in start_offsets.items():
+        tp = TopicPartition(topic, partition, offset)
+        consumer.assign([tp])  # This should ideally be a list of all partitions you're working with
+        # print("Offset:", offset)
+        consumer.seek(TopicPartition(topic, partition, offset))
+    total_messages = sum(end_offsets[p] - start_offsets[p] for p in partitions)
+    print("Start Offsets: ", start_offsets, "End Offsets: ", end_offsets)
+    print(f"Total Messages to Consume: {total_messages}")
 
-    # Setting the consumer to start from the offsets corresponding to N days ago
-    if offsets[0].offset == -1:
-        raise Exception("No messages found for the specified time range.")
-    else:
-
-        # Seek to the start of the previous day
-        print("Successfully offset Kafka: ", offsets[0])
-        consumer.assign([offsets[0]])
-        print(f'Reading Kafka Broker and filtering logs for the previous {day1-day2} day')
     return total_messages
-
+total_messages = 0
+while total_messages<=0:
 # Set up your topic and adjust consumer offsets based on the specified number of days
-total_messages = set_consumer_offsets_to_n_days_ago(consumer, topic_name, args.days1, args.days2)
-# total_messages = set_consumer_offsets_to_n_days_ago(consumer, topic_name, 1, 0)
+    total_messages= set_consumer_offsets_to_n_days_ago(consumer, topic_name, args.days1, args.days2)
+    # total_messages = set_consumer_offsets_to_n_days_ago(consumer, topic_name, 0.0001, 0)
 print("Total Messages:", total_messages)
 
 #%%
@@ -201,35 +200,14 @@ del watches, ratings
 gc.collect()
 # display(df_watch_raw)
 # display(df_rating)
+
 #%%
 #for each user-movie, get the last watched movie parts
 df_watch = df_watch_raw.groupby(['userid', 'movieid' ])[['movieparts', 'watch_time']].max().reset_index()
-
-df_user =  list(set(df_watch['userid']) | set(df_rating['userid']))
 df_movie = list(set(df_watch['movieid']) | set(df_rating['movieid']))
 # df_user, df_movie
 
-
 #%%
-#------------------------------------FETCH USER API--------------------------
-user_sql = """
-select userid from User;
-"""
-cur.execute(user_sql)
-# Fetch and process all results to ensure no unread results are left
-all_users = cur.fetchall()
-all_users = [i[0] for i in all_users]
-
-user_api = []
-for u in tqdm(df_user, "Fetching User Information..."):
-    if u not in all_users:
-        if fetchUser:
-            user_info = get_user_info(u)
-        else:
-            user_info ={'user_id': u, 'age': None, 'occupation': None, 'gender': None}
-        if user_info != None:
-            user_api.append(user_info)
-
 def createDataFrame(list_dicts):
     if len(list_dicts)>0:
         default_keys = next(item for item in list_dicts if item is not None).keys()
@@ -239,9 +217,6 @@ def createDataFrame(list_dicts):
     else:
         df = pd.DataFrame(list_dicts)
     return df
-
-df_user_info = createDataFrame(user_api)
-# df_user_info
 
 
 
@@ -256,6 +231,7 @@ all_movies = cur.fetchall()
 all_movies = [i[0] for i in all_movies if i[0] !='']
 
 movie_api = []
+movie_exists = []
 movie_list = ['id', 'tmdb_id', 'imdb_id', 'title', 'original_title', 'adult', 'belongs_to_collection', 'budget', 'genres', 'homepage', 'original_language', 'overview', 'popularity', 'poster_path', 'production_companies', 'production_countries', 'release_date', 'revenue', 'runtime', 'spoken_languages', 'status', 'vote_average', 'vote_count']
 for m in tqdm(df_movie, "Fetching Movie Information..."):
     if m not in all_movies:
@@ -263,9 +239,12 @@ for m in tqdm(df_movie, "Fetching Movie Information..."):
             movie_info = get_movie_info(m)
         else:
             movie_info = {i: None for i in movie_list}
-            movie_info['id'] = u
+            movie_info['id'] = m
+
         if movie_info != None:
             movie_api.append(movie_info)
+    else:
+        movie_exists.append(m)
 
 df_movie_info = createDataFrame(movie_api)
 
@@ -281,35 +260,91 @@ def movie_feature(dff): #turn list of dictionary to list of strings with only th
     df['production_countries'] = dff['production_countries'].apply(lambda x:x[0]['name'] if x is not None and len(x)>0 else None)
     df['spoken_languages'] = dff['spoken_languages'].apply(lambda x:x[0]['name'] if x is not None and len(x)>0 else None)
     df = df.drop(columns=['genres'])
+    df = df.rename(columns = {'id':'movieid'})
     return df
 
-df_movie_info  = movie_feature(df_movie_info)
-# df_movie_info 
+if len(df_movie_info)>0:
+    df_movie_info  = movie_feature(df_movie_info)
 
+#%%
+
+#%%
+#------------------------------------Filter out Movie, User that are not in API-------------------------
+if fetchMovie:
+    if len(df_movie_info)>0:
+        df_rating = df_rating[df_rating['movieid'].isin(df_movie_info['movieid']) | df_rating['movieid'].isin(movie_exists)]
+        df_watch = df_watch[df_watch['movieid'].isin(df_movie_info['movieid'])| df_watch['movieid'].isin(movie_exists)]
+    else:
+        df_rating = df_rating[df_rating['movieid'].isin(movie_exists)]
+        df_watch = df_watch[df_watch['movieid'].isin(movie_exists)]
+else:
+    pass
+
+#%%
+df_user =  list(set(df_watch['userid']) | set(df_rating['userid']))
+
+#%%
+#------------------------------------FETCH USER API--------------------------
+user_sql = """
+select userid from User;
+"""
+cur.execute(user_sql)
+# Fetch and process all results to ensure no unread results are left
+all_users = cur.fetchall()
+all_users = [i[0] for i in all_users]
+
+user_api = []
+user_exists = []
+for u in tqdm(df_user, "Fetching User Information..."):
+    if u not in all_users:
+        if fetchUser:
+            user_info = get_user_info(u)
+        else:
+            user_info ={'user_id': u, 'age': None, 'occupation': None, 'gender': None}
+        if user_info != None:
+            user_api.append(user_info)
+    else:
+        user_exists.append(u)
+        
+
+
+df_user_info = createDataFrame(user_api)
+# df_user_info
+
+if fetchUser:
+    if len(df_user_info)>0:
+        df_rating = df_rating[df_rating['userid'].isin(df_user_info['user_id']) | df_rating['userid'].isin(user_exists) ]
+        df_watch = df_watch[df_watch['userid'].isin(df_user_info['user_id']) | df_watch['userid'].isin(user_exists)]
+    else:
+        df_rating = df_rating[df_rating['userid'].isin(user_exists) ]
+        df_watch = df_watch[df_watch['userid'].isin(user_exists)]
+else:
+    pass
 
 
 #%%
 # ------------------------------------UPDATE USER TABLE------------------------------------
 from sqlalchemy import create_engine, text
-df_user_info = df_user_info.rename(columns = {'user_id':'userid'}).drop_duplicates().applymap(lambda x: None if pd.isna(x) else x)
-columns = ', '.join(df_user_info.columns)  # Column names
-placeholders = ', '.join([f':{col}' for col in df_user_info.columns])  # Named placeholders
+if len(df_user_info)>0:
+    df_user_info = df_user_info.rename(columns = {'user_id':'userid'}).drop_duplicates().applymap(lambda x: None if pd.isna(x) else x)
+    columns = ', '.join(df_user_info.columns)  # Column names
+    placeholders = ', '.join([f':{col}' for col in df_user_info.columns])  # Named placeholders
 
-sql_template = f"INSERT IGNORE INTO User ({columns}) VALUES ({placeholders});"
+    sql_template = f"INSERT IGNORE INTO User ({columns}) VALUES ({placeholders});"
 
-# Execute the INSERT IGNORE for each row in the DataFrame
-with engine.connect() as con:
-    trans = con.begin()
-    try:
-        for index, row in df_user_info.iterrows():
-            try:
-                con.execute(text(sql_template), row.to_dict())
-            except Exception as e:
-                print(e)
-        trans.commit()
-    except:
-        trans.rollback()
-        pass
+    # Execute the INSERT IGNORE for each row in the DataFrame
+    with engine.connect() as con:
+        trans = con.begin()
+        try:
+            for index, row in df_user_info.iterrows():
+                try:
+                    con.execute(text(sql_template), row.to_dict())
+                except Exception as e:
+                    print(e)
+            trans.commit()
+        except:
+            trans.rollback()
+            pass
 
 print("User Table Update Finished...")
 # df_u = pd.read_sql_table('User', con=engine)
@@ -319,26 +354,27 @@ print("User Table Update Finished...")
 
 #%%
 # ------------------------------------UPDATE MOVIE TABLE------------------------------------
-df_movie_info = df_movie_info.rename(columns = {'id':'movieid'}).drop_duplicates().applymap(lambda x: None if pd.isna(x) else x)
-columns = ', '.join(df_movie_info.columns)  # Column names
-placeholders = ', '.join([f':{col}' for col in df_movie_info.columns])  # Named placeholders
-sql_template = f"INSERT IGNORE INTO Movie ({columns}) VALUES ({placeholders});"
-with engine.connect() as con:
-    trans = con.begin()
-    try:
-        for index, row in df_movie_info.iterrows():
-            try:
-                con.execute(text(sql_template), row.to_dict())
-            except Exception as e:
-                print(e)
-        trans.commit()
-    except:
-        trans.rollback()
-        pass
+if len(df_movie_info)>0:
+
+    df_movie_info = df_movie_info.rename(columns = {'id':'movieid'}).drop_duplicates().applymap(lambda x: None if pd.isna(x) else x)
+    columns = ', '.join(df_movie_info.columns)  # Column names
+    placeholders = ', '.join([f':{col}' for col in df_movie_info.columns])  # Named placeholders
+    sql_template = f"INSERT IGNORE INTO Movie ({columns}) VALUES ({placeholders});"
+    with engine.connect() as con:
+        trans = con.begin()
+        try:
+            for index, row in df_movie_info.iterrows():
+                try:
+                    con.execute(text(sql_template), row.to_dict())
+                except Exception as e:
+                    print(e)
+            trans.commit()
+        except:
+            trans.rollback()
+            pass
 print("Movie Table Update Finished...")
 # df_m = pd.read_sql_table('Movie', con=engine)
 # df_m
-
 
 
 #%%
@@ -360,7 +396,7 @@ for i in range(len(df_rating)):
 
 conn.commit()
 print("Rating Table Update Finished...")
-pd.read_sql_table('Rating', con=engine)
+# pd.read_sql_table('Rating', con=engine)
 #%%
 #------------------------------------UPDATE WATCH TABLE------------------------------------
 
@@ -380,7 +416,7 @@ for i in range(len(df_watch)):
 
 conn.commit()
 print("Watch Table Update Finished...")
-pd.read_sql_table('Watch', con=engine)
+# pd.read_sql_table('Watch', con=engine)
 
 #%%
 # 428297 in df_user, 428297 not in all_users, 495896 in [i['user_id'] for i in user_api], get_user_info(495896)
@@ -397,9 +433,6 @@ pd.read_sql_table('Watch', con=engine)
 # rows = cur.fetchall()
 # for row in rows:
 #     print(row)
-
-
-#%%
 
 #%%
 # Cleanup
