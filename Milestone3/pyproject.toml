@@ -1,0 +1,27 @@
+[project]
+name = "flaskr"
+version = "1.0.0"
+description = "Movie Recommendation System"
+dependencies = [
+    "flask",
+    "pandas",
+    "numpy",
+    "surprise",
+    "joblib",
+    "scipy",
+    "pympler",
+    "tqdm",
+    "waitress",
+    "requests"
+]
+
+[build-system]
+requires = ["flit_core<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["flaskr"]
