@@ -1,0 +1,9 @@
+pytest
+pytest-cov
+pandas
+numpy
+surprise
+joblib
+scipy
+pympler
+tqdm
